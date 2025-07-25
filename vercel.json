@@ -13,7 +13,7 @@
     }
   ],
   "env": {
-    "SECRET_KEY": "jbcasdvbhbkjsndhsvdjcsjbksnshgvchjncdbctvcshbjdskjvxvsdyshdshgdgvhd",
+    "SECRET_KEY": "@mail2sms_bd_secret_key",
     "GOOGLE_CLIENT_ID": "@mail2sms_bd_google_client_id",
     "GOOGLE_CLIENT_SECRET": "@mail2sms_bd_google_client_secret",
     "BULKSMSBD_API_KEY": "@mail2sms_bd_bulksmsbd_api_key",
