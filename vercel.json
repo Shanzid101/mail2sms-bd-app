@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app.py"
+    }
+  ],
+  "env": {
+    "SECRET_KEY": "@mail2sms_bd_secret_key",
+    "GOOGLE_CLIENT_ID": "@mail2sms_bd_google_client_id",
+    "GOOGLE_CLIENT_SECRET": "@mail2sms_bd_google_client_secret",
+    "BULKSMSBD_API_KEY": "@mail2sms_bd_bulksmsbd_api_key",
+    "BULKSMSBD_SENDER_ID": "@mail2sms_bd_bulksmsbd_sender_id",
+    "FLASK_REDIRECT_URI": "https://<your-vercel-app-name>.vercel.app/callback"
+  }
+}

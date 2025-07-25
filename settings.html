@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="bg-white p-8 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-6">Monitored Sender Settings</h2>
+
+    <form method="POST" action="{{ url_for('settings') }}" class="mb-8 p-6 border rounded-lg shadow-sm bg-gray-50">
+        <h3 class="text-xl font-semibold mb-4">Add New Sender</h3>
+        <div class="mb-4">
+            <label for="sender_email" class="block text-gray-700 text-sm font-bold mb-2">Sender Email:</label>
+            <input type="email" id="sender_email" name="sender_email" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="example@company.com" required>
+        </div>
+        <div class="mb-6">
+            <label for="recipient_phone" class="block text-gray-700 text-sm font-bold mb-2">Recipient Phone (BD Number):</label>
+            <input type="text" id="recipient_phone" name="recipient_phone" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="+8801XXXXXXXXX" required>
+        </div>
+        <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+            Add Sender
+        </button>
+    </form>
+
+    <h3 class="text-xl font-bold mb-4">Current Monitored Senders</h3>
+    {% if monitored_senders %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
+            <thead>
+                <tr class="bg-gray-100 text-left text-gray-600 uppercase text-sm leading-normal">
+                    <th class="py-3 px-6 border-b">Sender Email</th>
+                    <th class="py-3 px-6 border-b">Recipient Phone</th>
+                    <th class="py-3 px-6 border-b">Status</th>
+                    <th class="py-3 px-6 border-b">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-700 text-sm">
+                {% for sender in monitored_senders %}
+                <tr class="border-b border-gray-200 hover:bg-gray-50">
+                    <td class="py-3 px-6">{{ sender.sender_email }}</td>
+                    <td class="py-3 px-6">{{ sender.recipient_phone }}</td>
+                    <td class="py-3 px-6">
+                        {% if sender.enabled %}
+                            <span class="bg-green-200 text-green-800 py-1 px-3 rounded-full text-xs">Enabled</span>
+                        {% else %}
+                            <span class="bg-red-200 text-red-800 py-1 px-3 rounded-full text-xs">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-6">
+                        <a href="{{ url_for('delete_sender', index=loop.index0) }}" class="text-red-600 hover:text-red-800 text-sm font-semibold">Delete</a>
+                        </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-600">No senders configured yet. Add one above!</p>
+    {% endif %}
+</div>
+{% endblock %}

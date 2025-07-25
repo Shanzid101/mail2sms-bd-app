@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail2SMS BD - {% block title %}{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+    <nav class="bg-blue-600 p-4 text-white shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="{{ url_for('index') }}" class="text-2xl font-bold">Mail2SMS BD</a>
+            <div>
+                {% if current_user.is_authenticated %}
+                    <a href="{{ url_for('index') }}" class="px-3 py-2 rounded hover:bg-blue-700">Dashboard</a>
+                    <a href="{{ url_for('settings') }}" class="px-3 py-2 rounded hover:bg-blue-700">Settings</a>
+                    <a href="{{ url_for('logout') }}" class="px-3 py-2 rounded hover:bg-blue-700">Logout</a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="px-3 py-2 rounded hover:bg-blue-700">Login</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto mt-8 p-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-4">
+                    {% for category, message in messages %}
+                        <div class="p-3 mb-2 rounded 
+                            {% if category == 'success' %}bg-green-100 text-green-800 border border-green-400
+                            {% elif category == 'danger' %}bg-red-100 text-red-800 border border-red-400
+                            {% else %}bg-blue-100 text-blue-800 border border-blue-400{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
