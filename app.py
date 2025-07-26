@@ -167,7 +167,7 @@ def delete_sender(index):
 
 # --- Gmail API Integration (Updated to use DB) ---
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
+SCOPES = ['https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile' , 'https://www.googleapis.com/auth/gmail.modify']
 CLIENT_SECRETS_FILE = os.path.join(os.getcwd(), 'client_secrets.json') # Temp file for flow setup - Use working directory
 
 def create_client_secrets_file():
