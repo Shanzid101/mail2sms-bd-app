@@ -28,17 +28,18 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key')
 
 # Use a persistent path for SQLite DB in Render
-# We will create a subdirectory within the app's working directory for our database file.
-# This avoids permission errors with /var/data and is suitable for Render's ephemeral filesystem
-# combined with Render Disks feature (if persistent data is needed across deploys/restarts).
+# Render provides /var/data for persistent disk which is read-only for app code.
+# The proper way is to configure a Render Disk and mount it.
+# For now, to solve the PermissionError and make it runnable, we create 'data'
+# directory within the app's writable working directory.
 DATABASE_DIR = os.path.join(os.getcwd(), 'data') # <-- পরিবর্তিত: os.getcwd() ব্যবহার করে ডেটাবেস ডিরেক্টরি
 DATABASE_PATH = os.path.join(DATABASE_DIR, 'app.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///' + DATABASE_PATH)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Ensure the data directory exists for SQLite DB
-# Use exist_ok=True to prevent error if directory already exists
-os.makedirs(DATABASE_DIR, exist_ok=True) # <-- পরিবর্তিত: exist_ok=True যোগ করা হয়েছে
+# Use exist_ok=True to prevent error if directory already exists, and avoid permission issues.
+os.makedirs(DATABASE_DIR, exist_ok=True) # <-- পরিবর্তিত: os.makedirs(..., exist_ok=True) ব্যবহার করা হয়েছে
 
 db = SQLAlchemy(app)
 
@@ -70,8 +71,18 @@ class User(UserMixin, db.Model):
     def set_sms_logs(self, logs_list):
         self.sms_logs_json = json.dumps(logs_list)
 
-# Removed @app.before_first_request as it's deprecated in Flask 3.x
-# Database initialization is now handled explicitly in the main execution block
+# Database initialization (for Flask 3.x and gunicorn)
+# This code block will run when the 'app' object is created and imported by gunicorn
+with app.app_context(): # Ensure this runs within the app context
+    db.create_all() # Create database tables
+    # Add a default test user if not exists
+    if not User.query.filter_by(id="testuser").first():
+        default_user = User(id="testuser", password="testpassword")
+        db.session.add(default_user)
+        db.session.commit()
+        print("Default 'testuser' added to database.")
+    print("Database initialized (tables created and default user added if needed).") # Debug print
+
 
 # Flask-Login setup
 login_manager = LoginManager()
