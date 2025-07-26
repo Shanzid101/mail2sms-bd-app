@@ -167,7 +167,7 @@ def delete_sender(index):
 
 # --- Gmail API Integration (Updated to use DB) ---
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
 CLIENT_SECRETS_FILE = os.path.join(os.getcwd(), 'client_secrets.json') # Temp file for flow setup - Use working directory
 
 def create_client_secrets_file():
@@ -397,7 +397,7 @@ def check_gmail_for_new_mails():
 
 # --- Scheduler Setup ---
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=check_gmail_for_new_mails, trigger="interval", minutes=5)
+scheduler.add_job(func=check_gmail_for_new_mails, trigger="interval", minutes=2)
 scheduler.start()
 
 # Shut down the scheduler when the app exits
