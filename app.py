@@ -154,7 +154,7 @@ def delete_sender(index):
 
 # --- UPDATED: Gmail API Integration ---
 
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile']
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
 CLIENT_SECRETS_FILE = os.path.join(app.config['UPLOAD_FOLDER'], 'client_secrets.json') # Temp file for flow setup
 
 # Create client_secrets.json dynamically from .env variables
