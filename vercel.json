@@ -18,6 +18,6 @@
     "GOOGLE_CLIENT_SECRET": "@mail2sms_bd_google_client_secret",
     "BULKSMSBD_API_KEY": "@mail2sms_bd_bulksmsbd_api_key",
     "BULKSMSBD_SENDER_ID": "@mail2sms_bd_bulksmsbd_sender_id",
-    "FLASK_REDIRECT_URI": "https://<your-vercel-app-name>.vercel.app/callback"
+    "FLASK_REDIRECT_URI": "https://<your-render-app-name>.vercel.app/callback"
   }
 }
