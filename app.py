@@ -29,19 +29,17 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key')
 
 # Use a persistent path for SQLite DB in Render
 # Render provides /var/data for persistent disk.
-# We will create a subdirectory within /var/data for our database file.
-DATABASE_DIR = '/var/data/mail2sms_db' # <-- পরিবর্তিত: ডেটাবেসের জন্য নতুন সাব-ডিরেক্টরি
+# We will create a subdirectory within the app's working directory for our database file
+# and then link it to Render's persistent disk using Mounts.
+# For now, we will create it in the working directory to resolve PermissionError.
+DATABASE_DIR = os.path.join(os.getcwd(), 'data') # <-- পরিবর্তিত: os.getcwd() ব্যবহার করে ডেটাবেস ডিরেক্টরি
 DATABASE_PATH = os.path.join(DATABASE_DIR, 'app.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///' + DATABASE_PATH)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Ensure the data directory exists for SQLite DB
-# For Render, /var/data is often handled automatically. We need to create our subdirectory.
-# os.makedirs(DATABASE_DIR, exist_ok=True) এটি সরাসরি ব্যবহার করতে পারেন PermissionError এড়ানোর জন্য।
-# অথবা if not exist চেক করে তৈরি করা যেতে পারে।
-# এখানে আমরা পূর্বের আলোচনা অনুযায়ী DATABASE_DIR কে os.makedirs এর সাথে ব্যবহার করছি।
-if not os.path.exists(DATABASE_DIR): # <-- পরিবর্তিত: DATABASE_DIR তৈরি করার চেষ্টা
-    os.makedirs(DATABASE_DIR)
+# Use exist_ok=True to prevent error if directory already exists
+os.makedirs(DATABASE_DIR, exist_ok=True) # <-- পরিবর্তিত: exist_ok=True যোগ করা হয়েছে
 
 db = SQLAlchemy(app)
 
@@ -168,7 +166,8 @@ def delete_sender(index):
 # --- Gmail API Integration (Updated to use DB) ---
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
-CLIENT_SECRETS_FILE = os.path.join('/var/data', 'client_secrets.json') # Temp file for flow setup - Use persistent storage
+# CLIENT_SECRETS_FILE path updated to use working directory
+CLIENT_SECRETS_FILE = os.path.join(os.getcwd(), 'client_secrets.json') # <-- পরিবর্তিত: os.getcwd() ব্যবহার করে পাথ
 
 def create_client_secrets_file():
     client_id = os.getenv('GOOGLE_CLIENT_ID')
@@ -234,6 +233,7 @@ def oauth2callback():
     except Exception as e:
         flash(f"Error connecting Gmail: {e}", 'danger')
     
+    # Remove client_secrets.json after use
     if os.path.exists(CLIENT_SECRETS_FILE):
         os.remove(CLIENT_SECRETS_FILE)
 
@@ -307,10 +307,10 @@ def check_gmail_for_new_mails():
                 creds_pickle = user_obj.gmail_credentials_pickle # Get pickled creds from DB
                 monitored_senders = user_obj.get_monitored_senders() # Get senders from DB
 
-                print(f"User: {user_id}, Gmail Creds Exist: {bool(creds_pickle)}, Monitored Senders Count: {len(monitored_senders)}") # <-- Updated Debug Print
+                print(f"User: {user_id}, Gmail Creds Exist: {bool(creds_pickle)}, Monitored Senders Count: {len(monitored_senders)}")
 
                 if not creds_pickle or not monitored_senders:
-                    print(f"Skipping user {user_id}: No Gmail credentials or no senders configured.") # <-- Changed print
+                    print(f"Skipping user {user_id}: No Gmail credentials or no senders configured.")
                     continue
 
                 creds = None
@@ -322,15 +322,13 @@ def check_gmail_for_new_mails():
                             print(f"User {user_id}: Gmail token expired, attempting refresh.")
                             creds.refresh(Request())
                             user_obj.gmail_credentials_pickle = pickle.dumps(creds) # Save refreshed creds back to DB
-                            db.session.commit() # Commit updated creds
+                            db.session.commit()
                         else:
                             print(f"User {user_id}: Gmail token is invalid or expired and cannot be refreshed. Clearing token in DB.")
                             user_obj.gmail_credentials_pickle = None
-                            db.session.commit() # Commit token clearance
+                            db.session.commit()
                             continue
                     
-                    # No need to re-save if not refreshed, already loaded from DB
-
                     service = build('gmail', 'v1', credentials=creds)
 
                     query = "is:unread"
@@ -379,8 +377,8 @@ def check_gmail_for_new_mails():
                                 }
                                 sms_logs = user_obj.get_sms_logs()
                                 sms_logs.append(log_entry)
-                                user_obj.set_sms_logs(sms_logs) # Update logs in DB
-                                db.session.commit() # Save updated logs to DB
+                                user_obj.set_sms_logs(sms_logs)
+                                db.session.commit()
                                 
                                 if sms_success:
                                     print(f"SMS sent successfully to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
