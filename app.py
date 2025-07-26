@@ -10,83 +10,95 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
 import requests
 
-# --- New Imports for Gmail API ---
+# --- New Imports for Gmail API & DB ---
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-import pickle # To save/load user credentials securely
-import pytz # <-- নতুন ইম্পোর্ট
-from tzlocal import get_localzone # <-- নতুন ইম্পোর্ট
-
+import pickle
+import pytz
+from tzlocal import get_localzone
+from flask_sqlalchemy import SQLAlchemy # <-- নতুন ইম্পোর্ট
+from sqlalchemy import LargeBinary # For storing pickled credentials, part of SQLAlchemy
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key') # Replace with a strong secret key
-app.config['UPLOAD_FOLDER'] = 'uploads' # Used for storing tokens, etc.
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key')
+# Use a persistent path for SQLite DB in Render
+# Render provides /var/data for persistent disk.
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join('/var/data', 'app.db'))
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Ensure the upload folder exists
-if not os.path.exists(app.config['UPLOAD_FOLDER']):
-    os.makedirs(app.config['UPLOAD_FOLDER'])
+# Ensure the data directory exists for SQLite DB
+# For Render, /var/data is often handled automatically, but local check is good.
+# For local development, create a 'data' folder in your project root.
+if not os.path.exists(os.path.join('/var/data')): # Use /var/data for Render persistent storage
+    os.makedirs(os.path.join('/var/data'))
 
-# Flask-Login setup
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+db = SQLAlchemy(app) # <-- DB ইনিশিয়ালাইজেশন
 
-# --- User Management (Updated to store tokens and logs) ---
-# In a real app, you'd use a database like SQLite or PostgreSQL
-# We'll use a simple JSON file for persistence for MVP
-USERS_FILE = os.path.join(app.config['UPLOAD_FOLDER'], 'users.json')
+# --- User Management (Database Models) ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.String(50), primary_key=True)
+    password = db.Column(db.String(100), nullable=False) # In real app, store hashed passwords
+    gmail_credentials_pickle = db.Column(LargeBinary, nullable=True) # Store pickled credentials directly
+    
+    # Store monitored senders as JSON string
+    monitored_senders_json = db.Column(db.Text, default="[]") 
+    sms_logs_json = db.Column(db.Text, default="[]")
 
-def load_users():
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, 'r') as f:
-            return json.load(f)
-    return {
-        "testuser": {
-            "password": "testpassword", # In real app, store hashed passwords
-            "gmail_token_path": None, # Path to the pickled token file
-            "monitored_senders": [], # List of {"sender_email": "", "recipient_phone": "", "enabled": True}
-            "sms_logs": [] # List of {"timestamp": "", "from_email": "", "subject": "", "sms_status": ""}
-        }
-    }
-
-def save_users(users_data):
-    with open(USERS_FILE, 'w') as f:
-        json.dump(users_data, f, indent=4)
-
-USERS = load_users() # Load users data when app starts
-
-class User(UserMixin):
-    def __init__(self, id):
+    def __init__(self, id, password):
         self.id = id
+        self.password = password
 
     def get_id(self):
         return self.id
 
-    @staticmethod
-    def get(user_id):
-        if user_id in USERS:
-            return User(user_id)
-        return None
+    # Helper methods for JSON fields
+    def get_monitored_senders(self):
+        return json.loads(self.monitored_senders_json)
+
+    def set_monitored_senders(self, senders_list):
+        self.monitored_senders_json = json.dumps(senders_list)
+
+    def get_sms_logs(self):
+        return json.loads(self.sms_logs_json)
+
+    def set_sms_logs(self, logs_list):
+        self.sms_logs_json = json.dumps(logs_list)
+
+# This will create tables and add default user when app starts
+# For Render, ensure this runs only once or handles existing tables
+@app.before_first_request # <-- নতুন: অ্যাপ প্রথমবার রান হওয়ার আগে DB তৈরি
+def create_tables():
+    db.create_all()
+    # Add a default test user if not exists
+    if not User.query.filter_by(id="testuser").first():
+        default_user = User(id="testuser", password="testpassword")
+        db.session.add(default_user)
+        db.session.commit()
+        print("Default 'testuser' added to database.")
+
+# Flask-Login setup (now uses DB for user loading)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.get(user_id)
+    return User.query.get(user_id) # Load user from DB
 
-# --- Routes ---
+# --- Routes (Updated to use DB) ---
 
 @app.route('/')
 @login_required
 def index():
-    user_data = USERS.get(current_user.id)
-    gmail_connected = bool(user_data and user_data.get("gmail_token_path") and os.path.exists(user_data["gmail_token_path"]))
-    # Display last 5 SMS logs
-    sms_logs = sorted(user_data.get("sms_logs", []), key=lambda x: x['timestamp'], reverse=True)[:5]
-    return render_template('dashboard.html', gmail_connected=gmail_connected, user_data=user_data, sms_logs=sms_logs)
+    current_user_obj = User.query.get(current_user.id) # Fetch current user from DB
+    gmail_connected = bool(current_user_obj.gmail_credentials_pickle)
+    sms_logs = sorted(current_user_obj.get_sms_logs(), key=lambda x: x['timestamp'], reverse=True)[:5]
+    return render_template('dashboard.html', gmail_connected=gmail_connected, user_data=current_user_obj, sms_logs=sms_logs)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -96,10 +108,9 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        user_data = USERS.get(username)
+        user = User.query.filter_by(id=username).first()
 
-        if user_data and user_data["password"] == password: # In real app, check hashed password
-            user = User(username)
+        if user and user.password == password: # In real app, check hashed password
             login_user(user)
             flash('Logged in successfully!', 'success')
             return redirect(url_for('index'))
@@ -117,46 +128,47 @@ def logout():
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
-    user_data = USERS.get(current_user.id)
+    current_user_obj = User.query.get(current_user.id) # Fetch current user from DB
     if request.method == 'POST':
         sender_email = request.form.get('sender_email').strip()
         recipient_phone = request.form.get('recipient_phone').strip()
         
         if sender_email and recipient_phone:
+            monitored_senders = current_user_obj.get_monitored_senders()
             new_sender = {
                 "sender_email": sender_email,
                 "recipient_phone": recipient_phone,
                 "enabled": True
             }
-            user_data["monitored_senders"].append(new_sender)
+            monitored_senders.append(new_sender)
+            current_user_obj.set_monitored_senders(monitored_senders)
+            db.session.commit() # Save to DB
             flash('Sender added successfully!', 'success')
         else:
             flash('Please provide both sender email and recipient phone.', 'danger')
         
-        USERS[current_user.id] = user_data 
-        save_users(USERS) # Save to JSON file
-        
         return redirect(url_for('settings'))
     
-    return render_template('settings.html', monitored_senders=user_data.get("monitored_senders", []))
+    return render_template('settings.html', monitored_senders=current_user_obj.get_monitored_senders())
 
 @app.route('/delete_sender/<int:index>')
 @login_required
 def delete_sender(index):
-    user_data = USERS.get(current_user.id)
-    if 0 <= index < len(user_data.get("monitored_senders", [])):
-        user_data["monitored_senders"].pop(index)
-        USERS[current_user.id] = user_data 
-        save_users(USERS) # Save to JSON file
+    current_user_obj = User.query.get(current_user.id) # Fetch current user from DB
+    monitored_senders = current_user_obj.get_monitored_senders()
+    if 0 <= index < len(monitored_senders):
+        monitored_senders.pop(index)
+        current_user_obj.set_monitored_senders(monitored_senders)
+        db.session.commit() # Save to DB
         flash('Sender deleted successfully!', 'success')
     else:
         flash('Invalid sender index.', 'danger')
     return redirect(url_for('settings'))
 
-# --- UPDATED: Gmail API Integration ---
+# --- Gmail API Integration (Updated to use DB) ---
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
-CLIENT_SECRETS_FILE = os.path.join(app.config['UPLOAD_FOLDER'], 'client_secrets.json') # Temp file for flow setup
+CLIENT_SECRETS_FILE = os.path.join('/var/data', 'client_secrets.json') # Temp file for flow setup - Use persistent storage
 
 # Create client_secrets.json dynamically from .env variables
 def create_client_secrets_file():
@@ -168,7 +180,7 @@ def create_client_secrets_file():
     secrets = {
         "web": {
             "client_id": client_id,
-            "project_id": "your-project-id", # Can be dummy or actual project ID
+            "project_id": "your-project-id",
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
@@ -214,28 +226,22 @@ def oauth2callback():
 
         credentials = flow.credentials
 
-        # Save credentials to a file specific to the user
-        token_path = os.path.join(app.config['UPLOAD_FOLDER'], f'token_{current_user.id}.pickle')
-        with open(token_path, 'wb') as token:
-            pickle.dump(credentials, token)
-
-        user_data = USERS.get(current_user.id)
-        user_data["gmail_token_path"] = token_path
-        USERS[current_user.id] = user_data
-        save_users(USERS) # Save updated user data
+        # Save credentials to DB
+        current_user_obj = User.query.get(current_user.id)
+        current_user_obj.gmail_credentials_pickle = pickle.dumps(credentials) # Store as binary
+        db.session.commit() # Save to DB
 
         flash('Gmail connected successfully!', 'success')
     except Exception as e:
         flash(f"Error connecting Gmail: {e}", 'danger')
     
-    # Clean up the temporary client_secrets.json file
     if os.path.exists(CLIENT_SECRETS_FILE):
         os.remove(CLIENT_SECRETS_FILE)
 
     return redirect(url_for('index'))
 
 
-# --- SMS Sending Function ---
+# --- SMS Sending Function (No change here) ---
 def send_sms(recipient_phone, message):
     url = "https://bulksmsbd.net/api/smsapi"
     api_key = os.getenv('BULKSMSBD_API_KEY')
@@ -280,66 +286,64 @@ def send_sms(recipient_phone, message):
         return False
 
 
-# --- Background Job (Check Gmail for new mails) ---
-# This function will be called by APScheduler
-import pytz # <-- নতুন ইম্পোর্ট
-from tzlocal import get_localzone # <-- নতুন ইম্পোর্ট
-
+# --- Background Job (Check Gmail for new mails - Updated to use DB) ---
 def check_gmail_for_new_mails():
-    with app.app_context(): # Needed to access Flask app context (e.g., USERS, flash)
-        try: # Add a try-except block around the entire function for broader error catching
+    with app.app_context():
+        try:
             # আপনার স্থানীয় টাইমজোন সেট করুন (যেমন Asia/Dhaka)
             try:
                 local_tz = get_localzone()
             except pytz.UnknownTimeZoneError:
                 local_tz = pytz.timezone('Asia/Dhaka')
             
-            # বর্তমান সময় স্থানীয় টাইমজোনে
             now_local = datetime.datetime.now(local_tz)
 
-            print(f"Checking Gmail for new mails at {now_local.strftime('%Y-%m-%d %H:%M:%S %Z%z')}") # <--- পরিবর্তিত লাইন
+            print(f"Checking Gmail for new mails at {now_local.strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
             
-            for user_id, user_data in USERS.items():
-                token_path = user_data.get("gmail_token_path")
-                monitored_senders = user_data.get("monitored_senders", [])
+            # Fetch all users from DB for background job
+            all_users = User.query.all() # Get all users from DB
+            
+            for user_obj in all_users: # Iterate through each user
+                user_id = user_obj.id
+                creds_pickle = user_obj.gmail_credentials_pickle # Get pickled creds from DB
+                monitored_senders = user_obj.get_monitored_senders() # Get senders from DB
 
-                print(f"User: {user_id}, Gmail Token Path: {token_path}, Monitored Senders: {monitored_senders}") # <-- নতুন ডিবাগিং প্রিন্ট
+                print(f"User: {user_id}, Gmail Creds Exist: {bool(creds_pickle)}, Monitored Senders Count: {len(monitored_senders)}") # <-- Updated Debug Print
 
-                if not token_path or not os.path.exists(token_path) or not monitored_senders:
-                    print(f"Skipping user {user_id}: No Gmail token or no senders configured, or token file missing.") # <-- পরিবর্তিত প্রিন্ট
+                if not creds_pickle or not monitored_senders:
+                    print(f"Skipping user {user_id}: No Gmail credentials or no senders configured.") # <-- Changed print
                     continue
 
                 creds = None
                 try:
-                    with open(token_path, 'rb') as token:
-                        creds = pickle.load(token)
+                    creds = pickle.loads(creds_pickle) # Load from binary
 
                     if not creds or not creds.valid:
                         if creds and creds.expired and creds.refresh_token:
-                            print(f"User {user_id}: Gmail token expired, attempting refresh.") # <-- নতুন ডিবাগিং প্রিন্ট
+                            print(f"User {user_id}: Gmail token expired, attempting refresh.")
                             creds.refresh(Request())
+                            user_obj.gmail_credentials_pickle = pickle.dumps(creds) # Save refreshed creds back to DB
+                            db.session.commit() # Commit updated creds
                         else:
-                            print(f"User {user_id}: Gmail token is invalid or expired and cannot be refreshed. Clearing token.")
-                            user_data["gmail_token_path"] = None
-                            save_users(USERS)
-                            continue 
+                            print(f"User {user_id}: Gmail token is invalid or expired and cannot be refreshed. Clearing token in DB.")
+                            user_obj.gmail_credentials_pickle = None
+                            db.session.commit() # Commit token clearance
+                            continue
                     
-                    with open(token_path, 'wb') as token:
-                        pickle.dump(creds, token)
-                    print(f"User {user_id}: Gmail credentials loaded and refreshed if needed.") # <-- নতুন ডিবাগিং প্রিন্ট
+                    # No need to re-save if not refreshed, already loaded from DB
 
                     service = build('gmail', 'v1', credentials=creds)
 
-                    query = "is:unread" # Check unread mails
-                    print(f"User {user_id}: Querying Gmail with '{query}'.") # <-- নতুন ডিবাগিং প্রিন্ট
+                    query = "is:unread"
+                    print(f"User {user_id}: Querying Gmail with '{query}'.")
                     results = service.users().messages().list(userId='me', q=query).execute()
                     messages = results.get('messages', [])
 
                     if not messages:
-                        print(f"User {user_id}: No new unread messages found from Gmail API.") # <-- পরিবর্তিত প্রিন্ট
+                        print(f"User {user_id}: No new unread messages found from Gmail API.")
                         continue
 
-                    print(f"User {user_id}: Found {len(messages)} unread messages.") # <-- নতুন ডিবাগিং প্রিন্ট
+                    print(f"User {user_id}: Found {len(messages)} unread messages.")
                     for message in messages:
                         msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
                         
@@ -351,50 +355,50 @@ def check_gmail_for_new_mails():
                         match = re.search(r'<(.+?)>', from_email)
                         clean_from_email = match.group(1) if match else from_email.strip()
                         
-                        print(f"Processing message ID: {message['id']}, From: '{clean_from_email}', Subject: '{subject}'") # <-- নতুন ডিবাগিং প্রিন্ট
+                        print(f"Processing message ID: {message['id']}, From: '{clean_from_email}', Subject: '{subject}'")
 
-                        is_monitored_match = False # Flag to check if any sender config matched this email
+                        is_monitored_match = False
                         for sender_config in monitored_senders:
-                            print(f"Checking sender config: {sender_config['sender_email'].lower()} against '{clean_from_email.lower()}' (enabled: {sender_config['enabled']})") # <-- নতুন ডিবাগিং প্রিন্ট
+                            print(f"Checking sender config: {sender_config['sender_email'].lower()} against '{clean_from_email.lower()}' (enabled: {sender_config['enabled']})")
                             if sender_config["enabled"] and clean_from_email.lower() == sender_config["sender_email"].lower():
                                 is_monitored_match = True
                                 print(f"Match found for {user_id}: From '{clean_from_email}', Subject '{subject}'")
                                 
                                 service.users().messages().modify(userId='me', id=message['id'], body={'removeLabelIds': ['UNREAD']}).execute()
-                                print(f"Marked message {message['id']} as read.") # <-- নতুন ডিবাগিং প্রিন্ট
+                                print(f"Marked message {message['id']} as read.")
 
-                                # SMS মেসেজেও স্থানীয় সময় ব্যবহার করুন
-                                sms_message = f"📩 New Mail from {clean_from_email}\n\nSubject: \"{subject}\"\n\nTime: {now_local.strftime('%I:%M%p')}\n\n✅ Mail2SMS BD" # <--- পরিবর্তিত লাইন
+                                sms_message = f"📩 New Mail from {clean_from_email}\n\nSubject: \"{subject}\"\n\nTime: {now_local.strftime('%I:%M%p')}\n\n✅ Mail2SMS BD"
                                 
                                 sms_success = send_sms(sender_config["recipient_phone"], sms_message)
 
                                 log_entry = {
-                                    "timestamp": datetime.datetime.now().isoformat(), # Log এ UTC থাকুক, পরে UI তে কনভার্ট করা যাবে
+                                    "timestamp": datetime.datetime.now().isoformat(),
                                     "from_email": clean_from_email,
                                     "subject": subject,
                                     "sms_status": "Sent" if sms_success else "Failed",
                                     "recipient_phone": sender_config["recipient_phone"]
                                 }
-                                user_data["sms_logs"].append(log_entry)
-                                save_users(USERS)
+                                sms_logs = user_obj.get_sms_logs()
+                                sms_logs.append(log_entry)
+                                user_obj.set_sms_logs(sms_logs) # Update logs in DB
+                                db.session.commit() # Save updated logs to DB
                                 
                                 if sms_success:
                                     print(f"SMS sent successfully to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
                                 else:
                                     print(f"Failed to send SMS to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
-                                break # Break after finding a match and processing for this message
+                                break
                         if not is_monitored_match:
-                            print(f"No monitored sender matched for email from '{clean_from_email}'. Not sending SMS.") # <-- নতুন ডিবাগিং প্রিন্ট
+                            print(f"No monitored sender matched for email from '{clean_from_email}'. Not sending SMS.")
 
                 except Exception as e:
-                    print(f"Error during Gmail API call or processing for user {user_id}: {e}") # <-- পরিবর্তিত প্রিন্ট
+                    print(f"Error during Gmail API call or processing for user {user_id}: {e}")
         except Exception as e_outer:
-            print(f"An unexpected error occurred in check_gmail_for_new_mails for {user_id}: {e_outer}") # <-- নতুন ডিবাগিং প্রিন্ট
+            print(f"An unexpected error occurred in check_gmail_for_new_mails: {e_outer}")
 
 
 # --- Scheduler Setup ---
 scheduler = BackgroundScheduler()
-# Schedule the job to run every 5 minutes
 scheduler.add_job(func=check_gmail_for_new_mails, trigger="interval", minutes=5)
 scheduler.start()
 
@@ -403,10 +407,8 @@ atexit.register(lambda: scheduler.shutdown())
 
 
 if __name__ == '__main__':
-    # Set FLASK_REDIRECT_URI environment variable for local development if not already set
-    # This is important for the Google OAuth callback to work correctly
     if os.getenv('FLASK_REDIRECT_URI') is None:
         os.environ['FLASK_REDIRECT_URI'] = 'http://127.0.0.1:5000/callback'
         print(f"Set FLASK_REDIRECT_URI to: {os.environ['FLASK_REDIRECT_URI']}")
     
-    app.run(debug=True) # debug=True is for development, set to False in production
+    app.run(debug=True)
