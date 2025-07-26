@@ -8,15 +8,16 @@ import json
 import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 import atexit
-import requests # <-- নিশ্চিত করুন এটি এখানে আছে
+import requests
 
 # --- New Imports for Gmail API ---
-# from google_auth_oauthlib.flow import Flow # এই লাইনটি কমেন্ট আউট করা হয়েছে
-from google_auth_oauthlib.flow import InstalledAppFlow # <-- এই লাইনটি যোগ করা হয়েছে
+from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import pickle # To save/load user credentials securely
+import pytz # <-- নতুন ইম্পোর্ট
+from tzlocal import get_localzone # <-- নতুন ইম্পোর্ট
 
 
 # Load environment variables from .env file
@@ -184,9 +185,8 @@ def connect_gmail():
     try:
         create_client_secrets_file()
         
-        # Flow এর পরিবর্তে InstalledAppFlow ব্যবহার করুন
-        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES) # <-- পরিবর্তন করা হয়েছে
-        flow.redirect_uri = url_for('oauth2callback', _external=True) # Dynamically generate full URL
+        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES)
+        flow.redirect_uri = url_for('oauth2callback', _external=True)
         authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
         
         session['oauth_state'] = state
@@ -206,8 +206,7 @@ def oauth2callback():
     try:
         create_client_secrets_file()
         
-        # Flow এর পরিবর্তে InstalledAppFlow ব্যবহার করুন
-        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, state=state) # <-- পরিবর্তন করা হয়েছে
+        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, state=state)
         flow.redirect_uri = url_for('oauth2callback', _external=True)
 
         authorization_response = request.url
@@ -237,13 +236,8 @@ def oauth2callback():
 
 
 # --- SMS Sending Function ---
-# আপনার SMS পাঠানোর ফাংশনটি নিচে দেওয়া আছে।
-# import requests লাইনটি app.py এর একদম উপরে আছে, তাই এখানে আর দরকার নেই।
 def send_sms(recipient_phone, message):
-    # print(f"Sending SMS to {recipient_phone}: {message}") # Debugging এর জন্য রাখতে পারেন
-    
-    # BulkSMSBD API Configuration
-    url = "https://bulksmsbd.net/api/smsapi" # BulkSMSBD API Endpoint
+    url = "https://bulksmsbd.net/api/smsapi"
     api_key = os.getenv('BULKSMSBD_API_KEY')
     sender_id = os.getenv('BULKSMSBD_SENDER_ID')
 
@@ -251,21 +245,15 @@ def send_sms(recipient_phone, message):
         print("Error: BulkSMSBD API key or Sender ID not set in .env. SMS will not be sent.")
         return False
 
-    # Ensure phone number starts with 880 (common for BD numbers in APIs)
     if not recipient_phone.startswith('880'):
         if recipient_phone.startswith('+880'):
-            recipient_phone = recipient_phone[1:] # Remove '+'
+            recipient_phone = recipient_phone[1:]
         else:
-            # যদি +880 বা 880 দিয়ে শুরু না হয়, তাহলে 880 যোগ করুন (যেমন 017... হলে 88017...)
-            # তবে, বাংলাদেশের মোবাইল নম্বর সাধারণত 01 দিয়ে শুরু হয়।
-            # যদি সরাসরি 1xxxxxxxxxx থাকে, তাহলে 8801xxxxxxxxxx হবে।
-            # এই লজিকটি আপনার ডেটা ফরম্যাট অনুযায়ী পরিবর্তন করতে হতে পারে।
             if recipient_phone.startswith('0'):
                 recipient_phone = '88' + recipient_phone
             else:
-                recipient_phone = '880' + recipient_phone # Assuming it's a 10-digit number like 17XXXXXXXX
+                recipient_phone = '880' + recipient_phone
             
-    # নিশ্চিত করুন ফোন নাম্বারটি শুধুমাত্র সংখ্যা নিয়ে গঠিত
     recipient_phone = ''.join(filter(str.isdigit, recipient_phone))
 
     params = {
@@ -277,12 +265,11 @@ def send_sms(recipient_phone, message):
 
     try:
         response = requests.get(url, params=params)
-        response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+        response.raise_for_status()
         response_data = response.json()
         
         print(f"SMS API Response for {recipient_phone}: {response_data}")
 
-        # Check BulkSMSBD specific success code
         if response_data.get("response_code") == "200":
             return True
         else:
@@ -295,94 +282,115 @@ def send_sms(recipient_phone, message):
 
 # --- Background Job (Check Gmail for new mails) ---
 # This function will be called by APScheduler
+import pytz # <-- নতুন ইম্পোর্ট
+from tzlocal import get_localzone # <-- নতুন ইম্পোর্ট
+
 def check_gmail_for_new_mails():
     with app.app_context(): # Needed to access Flask app context (e.g., USERS, flash)
-        print(f"Checking Gmail for new mails at {datetime.datetime.now()}")
-        
-        for user_id, user_data in USERS.items():
-            token_path = user_data.get("gmail_token_path")
-            monitored_senders = user_data.get("monitored_senders", [])
-
-            if not token_path or not os.path.exists(token_path) or not monitored_senders:
-                # print(f"Skipping user {user_id}: No Gmail token or no senders configured.")
-                continue
-
-            creds = None
+        try: # Add a try-except block around the entire function for broader error catching
+            # আপনার স্থানীয় টাইমজোন সেট করুন (যেমন Asia/Dhaka)
             try:
-                with open(token_path, 'rb') as token:
-                    creds = pickle.load(token)
+                local_tz = get_localzone()
+            except pytz.UnknownTimeZoneError:
+                local_tz = pytz.timezone('Asia/Dhaka')
+            
+            # বর্তমান সময় স্থানীয় টাইমজোনে
+            now_local = datetime.datetime.now(local_tz)
 
-                if not creds or not creds.valid:
-                    if creds and creds.expired and creds.refresh_token:
-                        creds.refresh(Request())
-                    else:
-                        print(f"User {user_id}: Gmail token is invalid or expired and cannot be refreshed.")
-                        # এখানে লগইন টোকেনটি invalid/expired হলে ব্যবহারকারীকে আবার Gmail কানেক্ট করতে বলার জন্য
-                        # কিছু ব্যবস্থা নিতে পারেন। যেমন, user_data["gmail_token_path"] = None করে দিতে পারেন।
-                        user_data["gmail_token_path"] = None
-                        save_users(USERS)
-                        continue # Skip this user
-                
-                # Re-save credentials if they were refreshed
-                with open(token_path, 'wb') as token:
-                    pickle.dump(creds, token)
+            print(f"Checking Gmail for new mails at {now_local.strftime('%Y-%m-%d %H:%M:%S %Z%z')}") # <--- পরিবর্তিত লাইন
+            
+            for user_id, user_data in USERS.items():
+                token_path = user_data.get("gmail_token_path")
+                monitored_senders = user_data.get("monitored_senders", [])
 
-                service = build('gmail', 'v1', credentials=creds)
+                print(f"User: {user_id}, Gmail Token Path: {token_path}, Monitored Senders: {monitored_senders}") # <-- নতুন ডিবাগিং প্রিন্ট
 
-                # Fetch emails
-                # For simplicity, we'll fetch unread emails. For production, you'd track last checked time/message IDs.
-                query = "is:unread" # Check unread mails
-                results = service.users().messages().list(userId='me', q=query).execute()
-                messages = results.get('messages', [])
-
-                if not messages:
-                    print(f"User {user_id}: No new unread messages.")
+                if not token_path or not os.path.exists(token_path) or not monitored_senders:
+                    print(f"Skipping user {user_id}: No Gmail token or no senders configured, or token file missing.") # <-- পরিবর্তিত প্রিন্ট
                     continue
 
-                for message in messages:
-                    msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+                creds = None
+                try:
+                    with open(token_path, 'rb') as token:
+                        creds = pickle.load(token)
+
+                    if not creds or not creds.valid:
+                        if creds and creds.expired and creds.refresh_token:
+                            print(f"User {user_id}: Gmail token expired, attempting refresh.") # <-- নতুন ডিবাগিং প্রিন্ট
+                            creds.refresh(Request())
+                        else:
+                            print(f"User {user_id}: Gmail token is invalid or expired and cannot be refreshed. Clearing token.")
+                            user_data["gmail_token_path"] = None
+                            save_users(USERS)
+                            continue 
                     
-                    headers = msg['payload']['headers']
-                    from_email = next((header['value'] for header in headers if header['name'] == 'From'), 'Unknown Sender')
-                    subject = next((header['value'] for header in headers if header['name'] == 'Subject'), 'No Subject')
-                    
-                    # Extract only the email address from 'From' header
-                    import re
-                    match = re.search(r'<(.+?)>', from_email)
-                    clean_from_email = match.group(1) if match else from_email.strip()
+                    with open(token_path, 'wb') as token:
+                        pickle.dump(creds, token)
+                    print(f"User {user_id}: Gmail credentials loaded and refreshed if needed.") # <-- নতুন ডিবাগিং প্রিন্ট
 
-                    # Check if this email is from a monitored sender
-                    for sender_config in monitored_senders:
-                        if sender_config["enabled"] and clean_from_email.lower() == sender_config["sender_email"].lower():
-                            print(f"Match found for {user_id}: From '{clean_from_email}', Subject '{subject}'")
-                            
-                            # Mark email as read to avoid re-processing for simplicity.
-                            # In a real app, you might use labels or store message IDs.
-                            service.users().messages().modify(userId='me', id=message['id'], body={'removeLabelIds': ['UNREAD']}).execute()
+                    service = build('gmail', 'v1', credentials=creds)
 
-                            sms_message = f"📩 New Mail from {clean_from_email}\n\nSubject: \"{subject}\"\n\nTime: {datetime.datetime.now().strftime('%I:%M%p')}\n\n✅ Mail2SMS BD"
-                            
-                            sms_success = send_sms(sender_config["recipient_phone"], sms_message)
+                    query = "is:unread" # Check unread mails
+                    print(f"User {user_id}: Querying Gmail with '{query}'.") # <-- নতুন ডিবাগিং প্রিন্ট
+                    results = service.users().messages().list(userId='me', q=query).execute()
+                    messages = results.get('messages', [])
 
-                            # Log the SMS status
-                            log_entry = {
-                                "timestamp": datetime.datetime.now().isoformat(),
-                                "from_email": clean_from_email,
-                                "subject": subject,
-                                "sms_status": "Sent" if sms_success else "Failed",
-                                "recipient_phone": sender_config["recipient_phone"]
-                            }
-                            user_data["sms_logs"].append(log_entry)
-                            save_users(USERS) # Save updated user data including logs
-                            
-                            if sms_success:
-                                print(f"SMS sent successfully to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
-                            else:
-                                print(f"Failed to send SMS to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
-                            break # Break after finding a match and processing for this message
-            except Exception as e:
-                print(f"Error checking Gmail for user {user_id}: {e}")
-                # You might want to flash an error to the user if the token is consistently bad.
+                    if not messages:
+                        print(f"User {user_id}: No new unread messages found from Gmail API.") # <-- পরিবর্তিত প্রিন্ট
+                        continue
+
+                    print(f"User {user_id}: Found {len(messages)} unread messages.") # <-- নতুন ডিবাগিং প্রিন্ট
+                    for message in messages:
+                        msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+                        
+                        headers = msg['payload']['headers']
+                        from_email = next((header['value'] for header in headers if header['name'] == 'From'), 'Unknown Sender')
+                        subject = next((header['value'] for header in headers if header['name'] == 'Subject'), 'No Subject')
+                        
+                        import re
+                        match = re.search(r'<(.+?)>', from_email)
+                        clean_from_email = match.group(1) if match else from_email.strip()
+                        
+                        print(f"Processing message ID: {message['id']}, From: '{clean_from_email}', Subject: '{subject}'") # <-- নতুন ডিবাগিং প্রিন্ট
+
+                        is_monitored_match = False # Flag to check if any sender config matched this email
+                        for sender_config in monitored_senders:
+                            print(f"Checking sender config: {sender_config['sender_email'].lower()} against '{clean_from_email.lower()}' (enabled: {sender_config['enabled']})") # <-- নতুন ডিবাগিং প্রিন্ট
+                            if sender_config["enabled"] and clean_from_email.lower() == sender_config["sender_email"].lower():
+                                is_monitored_match = True
+                                print(f"Match found for {user_id}: From '{clean_from_email}', Subject '{subject}'")
+                                
+                                service.users().messages().modify(userId='me', id=message['id'], body={'removeLabelIds': ['UNREAD']}).execute()
+                                print(f"Marked message {message['id']} as read.") # <-- নতুন ডিবাগিং প্রিন্ট
+
+                                # SMS মেসেজেও স্থানীয় সময় ব্যবহার করুন
+                                sms_message = f"📩 New Mail from {clean_from_email}\n\nSubject: \"{subject}\"\n\nTime: {now_local.strftime('%I:%M%p')}\n\n✅ Mail2SMS BD" # <--- পরিবর্তিত লাইন
+                                
+                                sms_success = send_sms(sender_config["recipient_phone"], sms_message)
+
+                                log_entry = {
+                                    "timestamp": datetime.datetime.now().isoformat(), # Log এ UTC থাকুক, পরে UI তে কনভার্ট করা যাবে
+                                    "from_email": clean_from_email,
+                                    "subject": subject,
+                                    "sms_status": "Sent" if sms_success else "Failed",
+                                    "recipient_phone": sender_config["recipient_phone"]
+                                }
+                                user_data["sms_logs"].append(log_entry)
+                                save_users(USERS)
+                                
+                                if sms_success:
+                                    print(f"SMS sent successfully to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
+                                else:
+                                    print(f"Failed to send SMS to {sender_config['recipient_phone']} for new mail from {clean_from_email}.")
+                                break # Break after finding a match and processing for this message
+                        if not is_monitored_match:
+                            print(f"No monitored sender matched for email from '{clean_from_email}'. Not sending SMS.") # <-- নতুন ডিবাগিং প্রিন্ট
+
+                except Exception as e:
+                    print(f"Error during Gmail API call or processing for user {user_id}: {e}") # <-- পরিবর্তিত প্রিন্ট
+        except Exception as e_outer:
+            print(f"An unexpected error occurred in check_gmail_for_new_mails for {user_id}: {e_outer}") # <-- নতুন ডিবাগিং প্রিন্ট
+
 
 # --- Scheduler Setup ---
 scheduler = BackgroundScheduler()
