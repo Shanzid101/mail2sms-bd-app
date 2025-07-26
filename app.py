@@ -28,10 +28,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key')
 
 # Use a persistent path for SQLite DB in Render
-# Render provides /var/data for persistent disk.
-# We will create a subdirectory within the app's working directory for our database file
-# and then link it to Render's persistent disk using Mounts.
-# For now, we will create it in the working directory to resolve PermissionError.
+# We will create a subdirectory within the app's working directory for our database file.
+# This avoids permission errors with /var/data and is suitable for Render's ephemeral filesystem
+# combined with Render Disks feature (if persistent data is needed across deploys/restarts).
 DATABASE_DIR = os.path.join(os.getcwd(), 'data') # <-- পরিবর্তিত: os.getcwd() ব্যবহার করে ডেটাবেস ডিরেক্টরি
 DATABASE_PATH = os.path.join(DATABASE_DIR, 'app.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///' + DATABASE_PATH)
@@ -71,15 +70,10 @@ class User(UserMixin, db.Model):
     def set_sms_logs(self, logs_list):
         self.sms_logs_json = json.dumps(logs_list)
 
-@app.before_first_request
-def create_tables():
-    db.create_all()
-    if not User.query.filter_by(id="testuser").first():
-        default_user = User(id="testuser", password="testpassword")
-        db.session.add(default_user)
-        db.session.commit()
-        print("Default 'testuser' added to database.")
+# Removed @app.before_first_request as it's deprecated in Flask 3.x
+# Database initialization is now handled explicitly in the main execution block
 
+# Flask-Login setup
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -166,8 +160,7 @@ def delete_sender(index):
 # --- Gmail API Integration (Updated to use DB) ---
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
-# CLIENT_SECRETS_FILE path updated to use working directory
-CLIENT_SECRETS_FILE = os.path.join(os.getcwd(), 'client_secrets.json') # <-- পরিবর্তিত: os.getcwd() ব্যবহার করে পাথ
+CLIENT_SECRETS_FILE = os.path.join(os.getcwd(), 'client_secrets.json') # Temp file for flow setup - Use working directory
 
 def create_client_secrets_file():
     client_id = os.getenv('GOOGLE_CLIENT_ID')
