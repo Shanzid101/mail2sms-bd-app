@@ -18,34 +18,39 @@ from googleapiclient.discovery import build
 import pickle
 import pytz
 from tzlocal import get_localzone
-from flask_sqlalchemy import SQLAlchemy # <-- নতুন ইম্পোর্ট
-from sqlalchemy import LargeBinary # For storing pickled credentials, part of SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import LargeBinary
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your_super_secret_key')
+
 # Use a persistent path for SQLite DB in Render
 # Render provides /var/data for persistent disk.
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join('/var/data', 'app.db'))
+# We will create a subdirectory within /var/data for our database file.
+DATABASE_DIR = '/var/data/mail2sms_db' # <-- পরিবর্তিত: ডেটাবেসের জন্য নতুন সাব-ডিরেক্টরি
+DATABASE_PATH = os.path.join(DATABASE_DIR, 'app.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///' + DATABASE_PATH)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Ensure the data directory exists for SQLite DB
-# For Render, /var/data is often handled automatically, but local check is good.
-# For local development, create a 'data' folder in your project root.
-if not os.path.exists(os.path.join('/var/data')): # Use /var/data for Render persistent storage
-    os.makedirs(os.path.join('/var/data'))
+# For Render, /var/data is often handled automatically. We need to create our subdirectory.
+# os.makedirs(DATABASE_DIR, exist_ok=True) এটি সরাসরি ব্যবহার করতে পারেন PermissionError এড়ানোর জন্য।
+# অথবা if not exist চেক করে তৈরি করা যেতে পারে।
+# এখানে আমরা পূর্বের আলোচনা অনুযায়ী DATABASE_DIR কে os.makedirs এর সাথে ব্যবহার করছি।
+if not os.path.exists(DATABASE_DIR): # <-- পরিবর্তিত: DATABASE_DIR তৈরি করার চেষ্টা
+    os.makedirs(DATABASE_DIR)
 
-db = SQLAlchemy(app) # <-- DB ইনিশিয়ালাইজেশন
+db = SQLAlchemy(app)
 
 # --- User Management (Database Models) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.String(50), primary_key=True)
-    password = db.Column(db.String(100), nullable=False) # In real app, store hashed passwords
-    gmail_credentials_pickle = db.Column(LargeBinary, nullable=True) # Store pickled credentials directly
+    password = db.Column(db.String(100), nullable=False)
+    gmail_credentials_pickle = db.Column(LargeBinary, nullable=True)
     
-    # Store monitored senders as JSON string
     monitored_senders_json = db.Column(db.Text, default="[]") 
     sms_logs_json = db.Column(db.Text, default="[]")
 
@@ -56,7 +61,6 @@ class User(UserMixin, db.Model):
     def get_id(self):
         return self.id
 
-    # Helper methods for JSON fields
     def get_monitored_senders(self):
         return json.loads(self.monitored_senders_json)
 
@@ -69,33 +73,29 @@ class User(UserMixin, db.Model):
     def set_sms_logs(self, logs_list):
         self.sms_logs_json = json.dumps(logs_list)
 
-# This will create tables and add default user when app starts
-# For Render, ensure this runs only once or handles existing tables
-@app.before_first_request # <-- নতুন: অ্যাপ প্রথমবার রান হওয়ার আগে DB তৈরি
+@app.before_first_request
 def create_tables():
     db.create_all()
-    # Add a default test user if not exists
     if not User.query.filter_by(id="testuser").first():
         default_user = User(id="testuser", password="testpassword")
         db.session.add(default_user)
         db.session.commit()
         print("Default 'testuser' added to database.")
 
-# Flask-Login setup (now uses DB for user loading)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(user_id) # Load user from DB
+    return User.query.get(user_id)
 
 # --- Routes (Updated to use DB) ---
 
 @app.route('/')
 @login_required
 def index():
-    current_user_obj = User.query.get(current_user.id) # Fetch current user from DB
+    current_user_obj = User.query.get(current_user.id)
     gmail_connected = bool(current_user_obj.gmail_credentials_pickle)
     sms_logs = sorted(current_user_obj.get_sms_logs(), key=lambda x: x['timestamp'], reverse=True)[:5]
     return render_template('dashboard.html', gmail_connected=gmail_connected, user_data=current_user_obj, sms_logs=sms_logs)
@@ -110,7 +110,7 @@ def login():
         password = request.form.get('password')
         user = User.query.filter_by(id=username).first()
 
-        if user and user.password == password: # In real app, check hashed password
+        if user and user.password == password:
             login_user(user)
             flash('Logged in successfully!', 'success')
             return redirect(url_for('index'))
@@ -128,7 +128,7 @@ def logout():
 @app.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings():
-    current_user_obj = User.query.get(current_user.id) # Fetch current user from DB
+    current_user_obj = User.query.get(current_user.id)
     if request.method == 'POST':
         sender_email = request.form.get('sender_email').strip()
         recipient_phone = request.form.get('recipient_phone').strip()
@@ -142,7 +142,7 @@ def settings():
             }
             monitored_senders.append(new_sender)
             current_user_obj.set_monitored_senders(monitored_senders)
-            db.session.commit() # Save to DB
+            db.session.commit()
             flash('Sender added successfully!', 'success')
         else:
             flash('Please provide both sender email and recipient phone.', 'danger')
@@ -154,12 +154,12 @@ def settings():
 @app.route('/delete_sender/<int:index>')
 @login_required
 def delete_sender(index):
-    current_user_obj = User.query.get(current_user.id) # Fetch current user from DB
+    current_user_obj = User.query.get(current_user.id)
     monitored_senders = current_user_obj.get_monitored_senders()
     if 0 <= index < len(monitored_senders):
         monitored_senders.pop(index)
         current_user_obj.set_monitored_senders(monitored_senders)
-        db.session.commit() # Save to DB
+        db.session.commit()
         flash('Sender deleted successfully!', 'success')
     else:
         flash('Invalid sender index.', 'danger')
@@ -170,7 +170,6 @@ def delete_sender(index):
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email', 'openid' , 'https://www.googleapis.com/auth/userinfo.profile']
 CLIENT_SECRETS_FILE = os.path.join('/var/data', 'client_secrets.json') # Temp file for flow setup - Use persistent storage
 
-# Create client_secrets.json dynamically from .env variables
 def create_client_secrets_file():
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
