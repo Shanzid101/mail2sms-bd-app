@@ -25,6 +25,7 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pyparsing==3.2.3
 python-dotenv==1.1.1
+pytz==2025.2  # <-- এই লাইনটি যোগ করা হয়েছে
 requests==2.32.4
 requests-oauthlib==2.0.0
 rsa==4.9.1
