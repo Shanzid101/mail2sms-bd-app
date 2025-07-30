@@ -5,32 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mail2SMS BD - {% block title %}{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto Mono', monospace; /* A tech-inspired monospace font */
+        }
+        .gradient-text {
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+        /* Custom scrollbar for a tech aesthetic */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a202c; /* Dark track */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4A5568; /* Greyish thumb */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6B46C1; /* Purple on hover */
+        }
+    </style>
 </head>
-<body class="bg-gray-100 font-sans leading-normal tracking-normal">
-    <nav class="bg-blue-600 p-4 text-white shadow-md">
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col">
+    <nav class="bg-gray-800 p-4 shadow-lg border-b border-gray-700">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="{{ url_for('index') }}" class="text-2xl font-bold">Mail2SMS BD</a>
+            <a href="{{ url_for('index') }}" class="text-3xl font-extrabold gradient-text bg-gradient-to-r from-purple-400 to-pink-600">
+                Mail2SMS BD
+            </a>
             <div>
                 {% if current_user.is_authenticated %}
-                    <a href="{{ url_for('index') }}" class="px-3 py-2 rounded hover:bg-blue-700">Dashboard</a>
-                    <a href="{{ url_for('settings') }}" class="px-3 py-2 rounded hover:bg-blue-700">Settings</a>
-                    <a href="{{ url_for('logout') }}" class="px-3 py-2 rounded hover:bg-blue-700">Logout</a>
+                    <a href="{{ url_for('index') }}" class="px-4 py-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition duration-200 text-lg font-medium">Dashboard</a>
+                    <a href="{{ url_for('settings') }}" class="px-4 py-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition duration-200 text-lg font-medium">Settings</a>
+                    <a href="{{ url_for('logout') }}" class="px-4 py-2 rounded-lg bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold hover:from-red-600 hover:to-pink-700 transition duration-200 text-lg">Logout</a>
                 {% else %}
-                    <a href="{{ url_for('login') }}" class="px-3 py-2 rounded hover:bg-blue-700">Login</a>
+                    <a href="{{ url_for('login') }}" class="px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold hover:from-blue-600 hover:to-indigo-700 transition duration-200 text-lg">Login</a>
                 {% endif %}
             </div>
         </div>
     </nav>
 
-    <div class="container mx-auto mt-8 p-4">
+    <div class="container mx-auto mt-8 p-4 flex-grow">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="mb-4">
+                <div class="mb-6">
                     {% for category, message in messages %}
-                        <div class="p-3 mb-2 rounded 
-                            {% if category == 'success' %}bg-green-100 text-green-800 border border-green-400
-                            {% elif category == 'danger' %}bg-red-100 text-red-800 border border-red-400
-                            {% else %}bg-blue-100 text-blue-800 border border-blue-400{% endif %}">
+                        <div class="p-4 mb-3 rounded-lg border text-lg font-medium
+                            {% if category == 'success' %}bg-green-900 text-green-300 border-green-700
+                            {% elif category == 'danger' %}bg-red-900 text-red-300 border-red-700
+                            {% else %}bg-blue-900 text-blue-300 border-blue-700{% endif %}">
                             {{ message }}
                         </div>
                     {% endfor %}
@@ -39,5 +69,11 @@
         {% endwith %}
         {% block content %}{% endblock %}
     </div>
+
+    <footer class="bg-gray-800 p-4 mt-8 border-t border-gray-700 text-gray-400 text-center text-sm">
+        <div class="container mx-auto">
+            &copy; {{ moment.now().year }} Mail2SMS BD. All rights reserved. Designed with <span class="text-red-500">&hearts;</span> by Your Team.
+        </div>
+    </footer>
 </body>
 </html>
