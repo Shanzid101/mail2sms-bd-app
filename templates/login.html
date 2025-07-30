@@ -1,32 +1,42 @@
 {% extends "base.html" %}
 
-{% block title %}Login{% endblock %}
+{% block title %}Login - Mail2SMS BD{% endblock %}
 
 {% block content %}
-<div class="max-w-md mx-auto bg-white p-8 rounded-lg shadow-md">
-    <h2 class="text-2xl font-bold mb-6 text-center">Login to Mail2SMS BD</h2>
-    <form method="POST" action="{{ url_for('login') }}">
-        <div class="mb-4">
-            <label for="username" class="block text-gray-700 text-sm font-bold mb-2">Username:</label>
-            <input type="text" id="username" name="username" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required>
+<div class="min-h-screen flex items-center justify-center bg-gray-900 font-sans">
+    <div class="max-w-md w-full bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700">
+        <h2 class="text-3xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+            Welcome to Mail2SMS BD
+        </h2>
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="mb-5">
+                <label for="username" class="block text-gray-300 text-sm font-semibold mb-2">Username:</label>
+                <input type="text" id="username" name="username" class="shadow-sm appearance-none border border-gray-700 rounded w-full py-3 px-4 bg-gray-700 text-gray-100 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200" required>
+            </div>
+            <div class="mb-6">
+                <label for="password" class="block text-gray-300 text-sm font-semibold mb-2">Password:</label>
+                <input type="password" id="password" name="password" class="shadow-sm appearance-none border border-gray-700 rounded w-full py-3 px-4 bg-gray-700 text-gray-100 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200" required>
+            </div>
+            <div class="flex items-center justify-between">
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 transition-all duration-200 transform hover:scale-105">
+                    Login
+                </button>
+            </div>
+        </form>
+        <p class="text-center text-gray-500 text-sm mt-6">
+            Don't have an account? <span class="text-gray-400">(Currently, user registration is not implemented. Use `testuser` / `testpassword`)</span>
+        </p>
+        <div class="mt-8 text-center">
+            <a href="{{ url_for('connect_gmail') }}" class="inline-flex items-center justify-center w-full bg-gradient-to-r from-red-600 to-orange-700 hover:from-red-700 hover:to-orange-800 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500 transition-all duration-200 transform hover:scale-105">
+                <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12.24 10.285V14.4H19.324C19.23 15.066 18.704 16.035 18.064 16.697C17.433 17.348 16.533 18.005 15.347 18.745C14.075 19.537 12.653 20 12.003 20C8.136 20 5.094 17.062 5.094 13.5C5.094 9.938 8.136 7 12.003 7C13.882 7 15.421 7.636 16.657 8.796L19.42 6.027C17.581 4.312 15.006 3 12.003 3C7.031 3 3 6.643 3 11.5C3 16.357 7.031 20 12.003 20C17.045 20 20 16.324 20 11.411C20 10.63 19.932 9.773 19.789 9.006H12.24V10.285Z" fill="#FBCD00"></path>
+                    <path d="M3 11.5C3 6.643 7.031 3 12.003 3C15.006 3 17.581 4.312 19.42 6.027L16.657 8.796C15.421 7.636 13.882 7 12.003 7C8.136 7 5.094 9.938 5.094 13.5C5.094 17.062 8.136 20 12.003 20C12.653 20 14.075 19.537 15.347 18.745C16.533 18.005 17.433 17.348 18.064 16.697C18.704 16.035 19.23 15.066 19.324 14.4H12.24V10.285H19.789C19.932 9.773 20 10.63 20 11.411C20 16.324 17.045 20 12.003 20C7.031 20 3 16.357 3 11.5Z" fill="#E8453D"></path>
+                    <path d="M12.003 7C13.882 7 15.421 7.636 16.657 8.796L19.42 6.027C17.581 4.312 15.006 3 12.003 3C7.031 3 3 6.643 3 11.5C3 16.357 7.031 20 12.003 20C17.045 20 20 16.324 20 11.411C20 10.63 19.932 9.773 19.789 9.006L12.24 9.006V10.285V14.4H19.324C19.23 15.066 18.704 16.035 18.064 16.697C17.433 17.348 16.533 18.005 15.347 18.745C14.075 19.537 12.653 20 12.003 20C8.136 20 5.094 17.062 5.094 13.5C5.094 9.938 8.136 7 12.003 7Z" fill="#34A853"></path>
+                    <path d="M12.003 7C13.882 7 15.421 7.636 16.657 8.796L19.42 6.027C17.581 4.312 15.006 3 12.003 3C7.031 3 3 6.643 3 11.5C3 16.357 7.031 20 12.003 20C17.045 20 20 16.324 20 11.411C20 10.63 19.932 9.773 19.789 9.006L12.24 9.006V10.285V14.4H19.324C19.23 15.066 18.704 16.035 18.064 16.697C17.433 17.348 16.533 18.005 15.347 18.745C14.075 19.537 12.653 20 12.003 20C8.136 20 5.094 17.062 5.094 13.5C5.094 9.938 8.136 7 12.003 7Z" fill="#4285F4"></path>
+                </svg>
+                Connect with Google (Coming Soon)
+            </a>
         </div>
-        <div class="mb-6">
-            <label for="password" class="block text-gray-700 text-sm font-bold mb-2">Password:</label>
-            <input type="password" id="password" name="password" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" required>
-        </div>
-        <div class="flex items-center justify-between">
-            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-                Login
-            </button>
-        </div>
-    </form>
-    <p class="text-center text-gray-600 text-sm mt-4">
-        Don't have an account? (Currently, user registration is not implemented. Use `testuser` / `testpassword`)
-    </p>
-    <div class="mt-6 text-center">
-        <a href="{{ url_for('connect_gmail') }}" class="inline-block bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-            Connect with Google (Coming Soon)
-        </a>
     </div>
 </div>
 {% endblock %}
