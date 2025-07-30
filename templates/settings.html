@@ -1,60 +1,84 @@
 {% extends "base.html" %}
 
-{% block title %}Settings{% endblock %}
+{% block title %}Settings - Mail2SMS BD{% endblock %}
 
 {% block content %}
-<div class="bg-white p-8 rounded-lg shadow-md">
-    <h2 class="text-2xl font-bold mb-6">Monitored Sender Settings</h2>
+<div class="bg-gray-800 p-8 rounded-xl shadow-lg border border-gray-700">
+    <h2 class="text-3xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+        Monitored Sender Settings
+    </h2>
 
-    <form method="POST" action="{{ url_for('settings') }}" class="mb-8 p-6 border rounded-lg shadow-sm bg-gray-50">
-        <h3 class="text-xl font-semibold mb-4">Add New Sender</h3>
-        <div class="mb-4">
-            <label for="sender_email" class="block text-gray-700 text-sm font-bold mb-2">Sender Email:</label>
-            <input type="email" id="sender_email" name="sender_email" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="example@company.com" required>
+    <form method="POST" action="{{ url_for('settings') }}" class="mb-10 p-8 rounded-xl shadow-md border border-gray-700 bg-gray-700">
+        <h3 class="text-xl font-semibold mb-6 text-blue-400 flex items-center">
+            <svg class="w-6 h-6 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12A9 9 0 113 12a9 9 0 0118 0z"></path></svg>
+            Add New Sender Rule
+        </h3>
+        <div class="mb-5">
+            <label for="sender_email" class="block text-gray-300 text-sm font-semibold mb-2">Sender Email:</label>
+            <input type="email" id="sender_email" name="sender_email" class="shadow-sm appearance-none border border-gray-600 rounded w-full py-3 px-4 bg-gray-900 text-gray-100 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200" placeholder="example@company.com" required>
         </div>
         <div class="mb-6">
-            <label for="recipient_phone" class="block text-gray-700 text-sm font-bold mb-2">Recipient Phone (BD Number):</label>
-            <input type="text" id="recipient_phone" name="recipient_phone" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="+8801XXXXXXXXX" required>
+            <label for="recipient_phone" class="block text-gray-300 text-sm font-semibold mb-2">Recipient Phone (BD Number):</label>
+            <input type="text" id="recipient_phone" name="recipient_phone" class="shadow-sm appearance-none border border-gray-600 rounded w-full py-3 px-4 bg-gray-900 text-gray-100 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition duration-200" placeholder="+8801XXXXXXXXX" required>
         </div>
-        <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
-            Add Sender
+        <button type="submit" class="w-full bg-gradient-to-r from-green-600 to-teal-700 hover:from-green-700 hover:to-teal-800 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-700 focus:ring-green-500 transition-all duration-200 transform hover:scale-105">
+            <span class="flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12A9 9 0 113 12a9 9 0 0118 0z"></path></svg>
+                Add Sender Rule
+            </span>
         </button>
     </form>
 
-    <h3 class="text-xl font-bold mb-4">Current Monitored Senders</h3>
+    <h3 class="text-2xl font-bold mb-6 text-gray-200">Current Monitored Senders</h3>
     {% if monitored_senders %}
-    <div class="overflow-x-auto">
-        <table class="min-w-full bg-white border border-gray-200 rounded-lg shadow-sm">
-            <thead>
-                <tr class="bg-gray-100 text-left text-gray-600 uppercase text-sm leading-normal">
-                    <th class="py-3 px-6 border-b">Sender Email</th>
-                    <th class="py-3 px-6 border-b">Recipient Phone</th>
-                    <th class="py-3 px-6 border-b">Status</th>
-                    <th class="py-3 px-6 border-b">Actions</th>
+    <div class="overflow-x-auto bg-gray-700 rounded-xl shadow-md border border-gray-600">
+        <table class="min-w-full divide-y divide-gray-600">
+            <thead class="bg-gray-600">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Sender Email
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Recipient Phone
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Status
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Actions
+                    </th>
                 </tr>
             </thead>
-            <tbody class="text-gray-700 text-sm">
+            <tbody class="divide-y divide-gray-700">
                 {% for sender in monitored_senders %}
-                <tr class="border-b border-gray-200 hover:bg-gray-50">
-                    <td class="py-3 px-6">{{ sender.sender_email }}</td>
-                    <td class="py-3 px-6">{{ sender.recipient_phone }}</td>
-                    <td class="py-3 px-6">
+                <tr class="hover:bg-gray-700 transition-colors duration-200">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
+                        {{ sender.sender_email }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-200">
+                        {{ sender.recipient_phone }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
                         {% if sender.enabled %}
-                            <span class="bg-green-200 text-green-800 py-1 px-3 rounded-full text-xs">Enabled</span>
+                            <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-800 text-green-200">
+                                Enabled
+                            </span>
                         {% else %}
-                            <span class="bg-red-200 text-red-800 py-1 px-3 rounded-full text-xs">Disabled</span>
+                            <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-800 text-red-200">
+                                Disabled
+                            </span>
                         {% endif %}
                     </td>
-                    <td class="py-3 px-6">
-                        <a href="{{ url_for('delete_sender', index=loop.index0) }}" class="text-red-600 hover:text-red-800 text-sm font-semibold">Delete</a>
-                        </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <a href="{{ url_for('delete_sender', index=loop.index0) }}" class="text-red-400 hover:text-red-500 hover:underline font-bold transition duration-200">Delete</a>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% else %}
-    <p class="text-gray-600">No senders configured yet. Add one above!</p>
+    <p class="text-gray-500 text-center py-8">No sender rules configured yet. Use the form above to add your first!</p>
     {% endif %}
 </div>
 {% endblock %}
